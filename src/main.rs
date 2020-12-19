@@ -56,18 +56,18 @@ struct DataService {
 #[derive(Debug, Deserialize)]
 struct Edmx {
     #[serde(alias = "DataServices")]
-    pub dataservices: Vec<DataService>
+    pub dataservice: DataService
 }
 
 #[derive(Debug)]
 struct OData {
-    entities: Vec<DataService>
+    entities: Vec<Entity>
 }
 
 impl From<Edmx> for OData {
     fn from(e: Edmx) -> Self {
         Self {
-            entities: e.dataservices
+            entities: e.dataservice.schema.entities
         }
     }
 }
@@ -76,5 +76,5 @@ fn main() {
     let file = File::open("odata_metadata.xml").unwrap();
     let edmx: Edmx = from_reader(file).unwrap();
     let odata = OData::from(edmx);
-    println!("{:#?}", odata);
+    println!("{:#?}", odata.entities);
 }
