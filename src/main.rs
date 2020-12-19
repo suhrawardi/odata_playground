@@ -31,7 +31,7 @@ struct Property {
 }
 
 #[derive(Debug, Deserialize)]
-struct Entity {
+struct OEntity {
     #[serde(alias = "Name")]
     pub name: String,
 
@@ -44,7 +44,7 @@ struct Entity {
 #[derive(Debug, Deserialize)]
 struct Schema {
     #[serde(alias = "EntityType")]
-    pub entities: Vec<Entity>
+    pub entities: Vec<OEntity>
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,30 +59,16 @@ struct Edmx {
     pub dataservice: DataService
 }
 
-#[derive(Debug, Deserialize)]
-struct ODataEntity {
-    pub name: String
-//    pub key: Vec<Key>,
-//    pub properties: Vec<Property>
-}
-
 #[derive(Debug)]
 struct OData {
-    entities: Vec<ODataEntity>
-}
-
-impl From<&Entity> for ODataEntity {
-    fn from(e:&Entity) -> Self {
-        Self {
-            name: e.name.clone()
-        }
-    }
+    entities: Vec<String>
 }
 
 impl From<Edmx> for OData {
     fn from(e: Edmx) -> Self {
         Self {
-            entities: e.dataservice.schema.entities.iter().map(|x| ODataEntity::from(x) ).collect()
+//          entities: e.dataservice.schema.entities.into_iter().collect()
+            entities: e.dataservice.schema.entities.iter().map(|x| x.name.clone()).collect::<Vec<_>>()
         }
     }
 }
