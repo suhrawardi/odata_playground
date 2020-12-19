@@ -59,15 +59,30 @@ struct Edmx {
     pub dataservice: DataService
 }
 
+#[derive(Debug, Deserialize)]
+struct ODataEntity {
+    pub name: String
+//    pub key: Vec<Key>,
+//    pub properties: Vec<Property>
+}
+
 #[derive(Debug)]
 struct OData {
-    entities: Vec<Entity>
+    entities: Vec<ODataEntity>
+}
+
+impl From<&Entity> for ODataEntity {
+    fn from(e:&Entity) -> Self {
+        Self {
+            name: e.name.clone()
+        }
+    }
 }
 
 impl From<Edmx> for OData {
     fn from(e: Edmx) -> Self {
         Self {
-            entities: e.dataservice.schema.entities
+            entities: e.dataservice.schema.entities.iter().map(|x| ODataEntity::from(x) ).collect()
         }
     }
 }
@@ -76,5 +91,6 @@ fn main() {
     let file = File::open("odata_metadata.xml").unwrap();
     let edmx: Edmx = from_reader(file).unwrap();
     let odata = OData::from(edmx);
+
     println!("{:#?}", odata.entities);
 }
