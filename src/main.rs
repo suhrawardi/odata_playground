@@ -7,6 +7,7 @@ use serde_xml_rs::from_reader;
 use std::collections::HashMap;
 use std::cell::Cell;
 use std::fs::File;
+use std::fs;
 
 #[derive(Debug, Deserialize)]
 struct PropertyRef {
@@ -69,7 +70,8 @@ struct Edmx {
     pub dataservice: DataService
 }
 
-fn main() {
+
+fn one() {
     let file = File::open("odata_metadata.xml").unwrap();
     let edmx: Edmx = from_reader(file).unwrap();
     let mut entities: HashMap<String,HashMap<String,&Property>> = HashMap::new();
@@ -87,4 +89,28 @@ fn main() {
         entities.insert(entity.name.clone(), props);
     }
     println!("{:#?}", entities);
+}
+
+fn two() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    for entity in doc.descendants().filter(|n| n.has_tag_name("EntityType")) {
+        println!("ENTITY {:#?}", entity.attribute("Name"));
+        for key in entity.descendants().filter(|n| n.has_tag_name("PropertyRef")) {
+            println!("KEY {:#?}", key.attribute("Name"));
+        }
+        for prop in entity.descendants().filter(|n| n.has_tag_name("Property")) {
+            println!("Property {:#?}", prop.attribute("Name"));
+            println!("{:#?}", prop.attribute("Type"));
+            println!("{:#?}", prop.attribute("Nullable"));
+            println!("{:#?}", prop.attribute("MaxLength"));
+        }
+    }
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    one();
+    two().ok();
+    Ok(())
 }
