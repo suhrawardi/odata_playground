@@ -6,7 +6,7 @@ use dotenv::dotenv;
 use reqwest::Client;
 use roxmltree::Node;
 use std::fs::{self, File};
-use std::env::{self, Args};
+use std::env;
 use std::io::Write;
 use std::path::Path;
 
@@ -167,6 +167,7 @@ fn write_id_impl(entity: Node) ->
     for key in entity.descendants().filter(el("PropertyRef")) {
         keys.push(key.attribute("Name").unwrap());
     }
+    out.push(format!("{:#?}", keys));
     debug!("KEYS {:#?}", keys);
     return Ok(out);
 }
