@@ -234,11 +234,9 @@ fn get_env(key: &str) -> String {
 }
 
 fn get_odata_url() -> String {
-    let host = get_env("ODATA_HOST");
-    let mut protocol = "https://".to_string();
-    protocol.push_str(&host);
-    protocol.push_str("/nl_acceptatie/ODataV4/$metadata/");
-    return protocol;
+    let mut host = get_env("ODATA_HOST");
+    host.push_str("$metadata/");
+    return host;
 }
 
 async fn download_metadata() ->
