@@ -117,60 +117,77 @@ fn property_line(prop: Node) -> String {
 }
 
 fn write_struct(entity: Node) ->
-        Result<(), Box<dyn std::error::Error + 'static>> {
-    println!("#[derive(Debug, Deserialize)]");
-    println!("struct {} {{", entity.attribute("Name").unwrap());
+        Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
+    let mut out: Vec<String> = Vec::new();
+    out.push("#[derive(Debug, Deserialize)]".to_string());
+    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
     for prop in entity.descendants().filter(is_prop()) {
-        println!("{}", property_line(prop));
+        out.push(format!("{}", property_line(prop)));
     }
-    println!("}}\n\n");
-    Ok(())
+    out.push("}}\n\n".to_string());
+    return Ok(out);
 }
 
 fn write_create_struct(entity: Node) ->
-        Result<(), Box<dyn std::error::Error + 'static>> {
-    println!("#[derive(Debug, Validate, Deserialize)]");
-    println!("struct {} {{", entity.attribute("Name").unwrap());
+        Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
+    let mut out: Vec<String> = Vec::new();
+    out.push("#[derive(Debug, Validate, Deserialize)]".to_string());
+    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
     for prop in entity.descendants().filter(is_editable_prop()) {
-        println!("{}", validatable_property_line(prop));
+        out.push(format!("{}", validatable_property_line(prop)));
     }
-    println!("}}\n\n");
-    Ok(())
+    out.push("}}\n\n".to_string());
+    return Ok(out);
 }
 
 fn write_update_struct(entity: Node) ->
-        Result<(), Box<dyn std::error::Error + 'static>> {
-    println!("#[derive(Debug, Validate, Deserialize)]");
-    println!("struct {} {{", entity.attribute("Name").unwrap());
+        Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
+    let mut out: Vec<String> = Vec::new();
+    out.push("#[derive(Debug, Validate, Deserialize)]".to_string());
+    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
     for prop in entity.descendants().filter(is_editable_prop()) {
-        println!("{}", validatable_property_line(prop));
+        out.push(format!("{}", validatable_property_line(prop)));
     }
-    println!("}}\n\n");
-    Ok(())
+    out.push("}}\n\n".to_string());
+    return Ok(out);
 }
 
 fn write_id_impl(entity: Node) ->
-        Result<(), Box<dyn std::error::Error + 'static>> {
+        Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
+    let mut out: Vec<String> = Vec::new();
     let mut keys = Vec::new();
     for key in entity.descendants().filter(el("PropertyRef")) {
         keys.push(key.attribute("Name").unwrap());
     }
     debug!("KEYS {:#?}", keys);
-    Ok(())
+    return Ok(out);
+}
+
+fn maybe_add(
+        node: Node,
+        func: &dyn Fn(Node) ->
+            Result<Vec<String>, Box<dyn std::error::Error + 'static>>
+) -> Vec<String> {
+    match func(node) {
+        Ok(output) => return output,
+        _ => return Vec::<String>::new()
+    }
 }
 
 pub async fn generate(name: &'static str) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
+    let mut out: Vec<String> = Vec::new();
     let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
     let doc = roxmltree::Document::parse(&xml).unwrap();
     let entity = doc.descendants().find(by_name(name));
-    println!("use chrono::DateTime;");
-    println!("use serde::Deserialize;");
-    println!("use validator::{{Validate, ValidationError}};\n\n");
-    write_struct(entity.unwrap().clone()).ok();
-    write_create_struct(entity.unwrap().clone()).ok();
-    write_update_struct(entity.unwrap().clone()).ok();
-    write_id_impl(entity.unwrap().clone()).ok();
+    out.push("use chrono::DateTime;".to_string());
+    out.push("use serde::Deserialize;".to_string());
+    out.push("use validator::{{Validate, ValidationError}};\n\n".to_string());
+    out.append(&mut maybe_add(entity.unwrap(), &write_struct));
+    out.append(&mut maybe_add(entity.unwrap(), &write_create_struct));
+    out.append(&mut maybe_add(entity.unwrap(), &write_update_struct));
+    out.append(&mut maybe_add(entity.unwrap(), &write_id_impl));
+    debug!("{:#?}", out);
     Ok(())
 }
 
