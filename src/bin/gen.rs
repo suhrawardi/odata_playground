@@ -6,10 +6,7 @@ use dotenv::dotenv;
 use reqwest::Client;
 use roxmltree::Node;
 use std::fs;
-// use std::fs::File;
-// use std::io;
 use std::env;
-// use tokio::runtime::Runtime;
 use std::path::Path;
 
 
@@ -21,37 +18,63 @@ fn editable(elem: Option<Node>) -> bool {
     }
 }
 
-fn two() -> Result<(), Box<dyn std::error::Error + 'static>> {
+fn generate_create_struct(entity: Node) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    debug!("struct {} {{", entity.attribute("Name").unwrap());
+    println!("}}");
+    Ok(())
+}
+
+fn generate_update_struct(entity: Node) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    debug!("struct {} {{", entity.attribute("Name").unwrap());
+    println!("struct {} {{", entity.attribute("Name").unwrap());
+    for prop in entity.descendants()
+        .filter(|n| n.has_tag_name("Property")) {
+        let elem =  prop.descendants()
+            .find(|n| n.attribute("Term") == Some("NAV.AllowEdit"));
+        if editable(elem) {
+            for key in entity.descendants()
+                .filter(|n| n.has_tag_name("PropertyRef")) {
+                // println!("KEY {:#?}", key.attribute("Name"));
+            }
+            println!(
+                "\t#[validate(length = {})]",
+                prop.attribute("MaxLength").unwrap()
+            );
+            println!(
+                "\tpub {}: {}",
+                prop.attribute("Name").unwrap(),
+                prop.attribute("Type").unwrap()
+            );
+            // println!("{:#?}", prop.attribute("Type"));
+            // println!("{:#?}", prop.attribute("Nullable"));
+            // println!("{:#?}", prop.attribute("MaxLength"));
+        }
+    }
+    println!("}}");
+    Ok(())
+}
+
+fn generate_id_impl(entity: Node) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    let mut keys = Vec::new();
+    for key in entity.descendants().filter(|n| n.has_tag_name("PropertyRef")) {
+        keys.push(key.attribute("Name").unwrap());
+        debug!("KEY {:#?}", key.attribute("Name"));
+    }
+    Ok(())
+}
+
+async fn generate(name: &str) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
     let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
     let doc = roxmltree::Document::parse(&xml).unwrap();
-    for entity in doc.descendants()
-        .filter(|n| n.has_tag_name("EntityType")) {
-        println!("struct {} {{", entity.attribute("Name").unwrap());
-        for prop in entity.descendants()
-            .filter(|n| n.has_tag_name("Property")) {
-            let elem =  prop.descendants()
-                .find(|n| n.attribute("Term") == Some("NAV.AllowEdit"));
-            if editable(elem) {
-                for key in entity.descendants()
-                    .filter(|n| n.has_tag_name("PropertyRef")) {
-                    // println!("KEY {:#?}", key.attribute("Name"));
-                }
-                println!(
-                    "\t#[validate(length = {})]",
-                    prop.attribute("MaxLength").unwrap()
-                );
-                println!(
-                    "\tpub {}: {}",
-                    prop.attribute("Name").unwrap(),
-                    prop.attribute("Type").unwrap()
-                );
-                // println!("{:#?}", prop.attribute("Type"));
-                // println!("{:#?}", prop.attribute("Nullable"));
-                // println!("{:#?}", prop.attribute("MaxLength"));
-            }
-        }
-        println!("}}");
-    }
+    let entity = doc.descendants()
+        .find(|n| n.has_tag_name("EntityType") && n.attribute("Name") == Some(name));
+    generate_create_struct(entity.unwrap().clone()).ok();
+    // generate_update_struct(entity.clone()).ok();
+    generate_id_impl(entity.unwrap().clone()).ok();
     Ok(())
 }
 
@@ -70,7 +93,8 @@ fn get_odata_url() -> String {
     return protocol;
 }
 
-async fn download_metadata() -> Result<(), Box<dyn std::error::Error + 'static>> {
+async fn download_metadata() ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
     let user = get_env("NAV_USER");
     let password = get_env("NAV_PASSWORD");
     let url = get_odata_url();
@@ -91,6 +115,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         download_metadata().await?;
         debug!("Downloaded the metadata");
     }
-    // two().ok();
+    generate("Alt_Address_Card").await?;
     Ok(())
 }
