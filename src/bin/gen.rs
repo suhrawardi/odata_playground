@@ -74,7 +74,9 @@ fn prop_str(prop: Node) -> Option<String> {
     } else {
         return Some(
             format!(
-                "\tpub {}: {};", attr_name.unwrap(), attr_type.unwrap()
+                "\tpub {}: {};",
+                attr_name.unwrap(),
+                attr_type.unwrap().replace("Edm.", "")
             )
         );
     }
