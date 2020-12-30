@@ -5,8 +5,9 @@ extern crate pretty_env_logger;
 use dotenv::dotenv;
 use reqwest::Client;
 use roxmltree::Node;
-use std::fs;
+use std::fs::{self, File};
 use std::env;
+use std::io::Write;
 use std::path::Path;
 
 
@@ -71,8 +72,11 @@ fn convert_type(attr_type: String) -> String {
         "Edm.String" => return String::from("String"),
         "Edm.Boolean" => return String::from("bool"),
         "Edm.Date" => return String::from("DateTime"),
-        "Edm.Number" => return String::from("u32"),
-        _ => return String::from("?"),
+        "Edm.Int32" => return String::from("u32"),
+        attr => {
+            warn!("No valid type found for {}", attr);
+            return String::from("?");
+        },
     }
 }
 
@@ -120,7 +124,7 @@ fn write_struct(entity: Node) ->
         Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
     let mut out: Vec<String> = Vec::new();
     out.push("#[derive(Debug, Deserialize)]".to_string());
-    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
+    out.push(format!("pub struct {} {{", entity.attribute("Name").unwrap()));
     for prop in entity.descendants().filter(is_prop()) {
         out.push(format!("{}", property_line(prop)));
     }
@@ -132,7 +136,9 @@ fn write_create_struct(entity: Node) ->
         Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
     let mut out: Vec<String> = Vec::new();
     out.push("#[derive(Debug, Validate, Deserialize)]".to_string());
-    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
+    out.push(
+        format!("pub struct {}Create {{", entity.attribute("Name").unwrap())
+    );
     for prop in entity.descendants().filter(is_editable_prop()) {
         out.push(format!("{}", validatable_property_line(prop)));
     }
@@ -144,7 +150,9 @@ fn write_update_struct(entity: Node) ->
         Result<Vec<String>, Box<dyn std::error::Error + 'static>> {
     let mut out: Vec<String> = Vec::new();
     out.push("#[derive(Debug, Validate, Deserialize)]".to_string());
-    out.push(format!("struct {} {{", entity.attribute("Name").unwrap()));
+    out.push(
+        format!("pub struct {}Update {{", entity.attribute("Name").unwrap())
+    );
     for prop in entity.descendants().filter(is_editable_prop()) {
         out.push(format!("{}", validatable_property_line(prop)));
     }
@@ -174,20 +182,40 @@ fn maybe_add(
     }
 }
 
-pub async fn generate(name: &'static str) ->
-        Result<(), Box<dyn std::error::Error + 'static>> {
+fn generate_code(entity: Node) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let entity = doc.descendants().find(by_name(name));
     out.push("use chrono::DateTime;".to_string());
     out.push("use serde::Deserialize;".to_string());
     out.push("use validator::{{Validate, ValidationError}};\n\n".to_string());
-    out.append(&mut maybe_add(entity.unwrap(), &write_struct));
-    out.append(&mut maybe_add(entity.unwrap(), &write_create_struct));
-    out.append(&mut maybe_add(entity.unwrap(), &write_update_struct));
-    out.append(&mut maybe_add(entity.unwrap(), &write_id_impl));
-    debug!("{:#?}", out);
+    out.append(&mut maybe_add(entity, &write_struct));
+    out.append(&mut maybe_add(entity, &write_create_struct));
+    out.append(&mut maybe_add(entity, &write_update_struct));
+    out.append(&mut maybe_add(entity, &write_id_impl));
+    return out;
+}
+
+fn write_code(filename: String, lines: Vec<String>) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    let mut file = File::create(filename)?;
+    for line in lines {
+        file.write_all(line.as_bytes())?;
+        file.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
+pub async fn generate(name: &'static str) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    let filename: String = format!("src/entities/{}.rs", name).replace("_", "");
+    if Path::new(&filename).exists() {
+        return Ok(())
+    }
+    let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    let entity = doc.descendants().find(by_name(name));
+    let out: Vec<String> = generate_code(entity.unwrap());
+    write_code(filename.to_string(), out).ok();
+    debug!("Written {}", filename);
     Ok(())
 }
 
