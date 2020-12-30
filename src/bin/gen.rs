@@ -66,6 +66,16 @@ fn validation_str(prop: Node) -> Option<String> {
     }
 }
 
+fn convert_type(attr_type: String) -> String {
+    match attr_type.as_ref() {
+        "Edm.String" => return String::from("String"),
+        "Edm.Boolean" => return String::from("bool"),
+        "Edm.Date" => return String::from("DateTime"),
+        "Edm.Number" => return String::from("u32"),
+        _ => return String::from("?"),
+    }
+}
+
 fn prop_str(prop: Node) -> Option<String> {
     let attr_name: Option<&str> = prop.attribute("Name");
     let attr_type: Option<&str> = prop.attribute("Type");
@@ -74,15 +84,15 @@ fn prop_str(prop: Node) -> Option<String> {
     } else {
         return Some(
             format!(
-                "\tpub {}: {};",
+                "\tpub {}: {},\n",
                 attr_name.unwrap(),
-                attr_type.unwrap().replace("Edm.", "")
+                convert_type(attr_type.unwrap().to_string())
             )
         );
     }
 }
 
-fn property_line(prop: Node) -> String {
+fn validatable_property_line(prop: Node) -> String {
     let mut line: String = String::new();
     match prop_str(prop) {
         Some(attr) => {
@@ -99,23 +109,43 @@ fn property_line(prop: Node) -> String {
     return line;
 }
 
+fn property_line(prop: Node) -> String {
+    match prop_str(prop) {
+        Some(attr) => return String::from(attr),
+        _ => return String::new(),
+    }
+}
+
+fn write_struct(entity: Node) ->
+        Result<(), Box<dyn std::error::Error + 'static>> {
+    println!("#[derive(Debug, Deserialize)]");
+    println!("struct {} {{", entity.attribute("Name").unwrap());
+    for prop in entity.descendants().filter(is_prop()) {
+        println!("{}", property_line(prop));
+    }
+    println!("}}\n\n");
+    Ok(())
+}
+
 fn write_create_struct(entity: Node) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
-    debug!("struct {} {{", entity.attribute("Name").unwrap());
+    println!("#[derive(Debug, Validate, Deserialize)]");
+    println!("struct {} {{", entity.attribute("Name").unwrap());
     for prop in entity.descendants().filter(is_editable_prop()) {
-        debug!("{}", property_line(prop));
+        println!("{}", validatable_property_line(prop));
     }
-    debug!("}}");
+    println!("}}\n\n");
     Ok(())
 }
 
 fn write_update_struct(entity: Node) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
-    debug!("struct {} {{", entity.attribute("Name").unwrap());
+    println!("#[derive(Debug, Validate, Deserialize)]");
+    println!("struct {} {{", entity.attribute("Name").unwrap());
     for prop in entity.descendants().filter(is_editable_prop()) {
-        debug!("{}", property_line(prop));
+        println!("{}", validatable_property_line(prop));
     }
-    debug!("}}");
+    println!("}}\n\n");
     Ok(())
 }
 
@@ -129,11 +159,15 @@ fn write_id_impl(entity: Node) ->
     Ok(())
 }
 
-async fn generate(name: &'static str) ->
+pub async fn generate(name: &'static str) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
     let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
     let doc = roxmltree::Document::parse(&xml).unwrap();
     let entity = doc.descendants().find(by_name(name));
+    println!("use chrono::DateTime;");
+    println!("use serde::Deserialize;");
+    println!("use validator::{{Validate, ValidationError}};\n\n");
+    write_struct(entity.unwrap().clone()).ok();
     write_create_struct(entity.unwrap().clone()).ok();
     write_update_struct(entity.unwrap().clone()).ok();
     write_id_impl(entity.unwrap().clone()).ok();
