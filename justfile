@@ -5,5 +5,5 @@ run:
     cargo run --bin odata_playground
 
 watch:
-    cargo watch -x "run --bin gen"
+    cargo watch -x "run --bin gen Alt_Address_Card"
     # cargo watch -x "run --bin odata_playground"

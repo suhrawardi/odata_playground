@@ -6,7 +6,7 @@ use dotenv::dotenv;
 use reqwest::Client;
 use roxmltree::Node;
 use std::fs::{self, File};
-use std::env;
+use std::env::{self, Args};
 use std::io::Write;
 use std::path::Path;
 
@@ -208,14 +208,20 @@ pub async fn generate(name: &'static str) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
     let filename: String = format!("src/entities/{}.rs", name).replace("_", "");
     if Path::new(&filename).exists() {
+        debug!("Path already exists {:#?}", filename);
         return Ok(())
     }
     let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
     let doc = roxmltree::Document::parse(&xml).unwrap();
-    let entity = doc.descendants().find(by_name(name));
-    let out: Vec<String> = generate_code(entity.unwrap());
-    write_code(filename.to_string(), out).ok();
-    debug!("Written {}", filename);
+    let node = doc.descendants().find(by_name(&name));
+    match node {
+        Some(entity) => {
+            let out: Vec<String> = generate_code(entity);
+            write_code(filename.to_string(), out).ok();
+            debug!("Written {}", filename);
+        },
+       _  => { warn!("Nothing found for {}", name) }
+    }
     Ok(())
 }
 
@@ -256,6 +262,11 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         download_metadata().await?;
         debug!("Downloaded the metadata");
     }
-    generate("Alt_Address_Card").await?;
+    for i in 1..env::args().len() {
+        let arg = Box::new(env::args().nth(i).expect("Missing argument"));
+        let entity: &'static str = Box::leak(arg);
+        debug!("Generating Struct for {:#?}", entity);
+        generate(entity).await?;
+    }
     Ok(())
 }
