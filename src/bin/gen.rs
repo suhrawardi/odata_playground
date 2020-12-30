@@ -10,49 +10,70 @@ use std::env;
 use std::path::Path;
 
 
+fn by_name(name: &'static str) -> Box<dyn FnMut(&Node) -> bool + 'static> {
+    Box::new(move |n|
+             n.has_tag_name("EntityType") &&
+             n.attribute("Name") == Some(name))
+}
 
-fn editable(elem: Option<Node>) -> bool {
-    match elem {
-        Some(el) => { el.attribute("Bool") != Some("false") },
-        None => { true }
-    }
+fn is_prop() -> Box<dyn FnMut(&Node) -> bool> {
+    Box::new(move |n| n.has_tag_name("Property"))
+}
+
+fn not_is_editable() -> Box<dyn FnMut(&Node) -> bool> {
+    Box::new(move |n|
+             n.attribute("Term") == Some("NAV.AllowEdit") &&
+             n.attribute("Bool") == Some("false"))
+}
+
+fn is_editable_prop() -> Box<dyn FnMut(&Node) -> bool> {
+    Box::new(move |n|
+             is_prop()(n) &&
+             n.descendants().find(not_is_editable()) == None)
+}
+
+fn nullable(prop: Node) -> bool {
+    return prop.attribute("Nullable") == Some("false");
+}
+
+fn has_maxlength(prop: Node) -> bool {
+    return !prop.attribute("MaxLength").is_none();
 }
 
 fn generate_create_struct(entity: Node) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
     debug!("struct {} {{", entity.attribute("Name").unwrap());
-    println!("}}");
+    for prop in entity.descendants().filter(is_editable_prop()) {
+        debug!(
+            "\tpub {}: {}",
+            prop.attribute("Name").unwrap(),
+            prop.attribute("Type").unwrap()
+        );
+    }
+    debug!("}}");
     Ok(())
 }
 
 fn generate_update_struct(entity: Node) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
     debug!("struct {} {{", entity.attribute("Name").unwrap());
-    println!("struct {} {{", entity.attribute("Name").unwrap());
-    for prop in entity.descendants()
-        .filter(|n| n.has_tag_name("Property")) {
-        let elem =  prop.descendants()
-            .find(|n| n.attribute("Term") == Some("NAV.AllowEdit"));
-        if editable(elem) {
-            for key in entity.descendants()
-                .filter(|n| n.has_tag_name("PropertyRef")) {
-                // println!("KEY {:#?}", key.attribute("Name"));
-            }
-            println!(
-                "\t#[validate(length = {})]",
+    for prop in entity.descendants().filter(is_editable_prop()) {
+        if nullable(prop) {
+            debug!("\t#[validate(required)]");
+        }
+        if has_maxlength(prop) {
+            debug!(
+                "\t#[validate(length={})]",
                 prop.attribute("MaxLength").unwrap()
             );
-            println!(
-                "\tpub {}: {}",
-                prop.attribute("Name").unwrap(),
-                prop.attribute("Type").unwrap()
-            );
-            // println!("{:#?}", prop.attribute("Type"));
-            // println!("{:#?}", prop.attribute("Nullable"));
-            // println!("{:#?}", prop.attribute("MaxLength"));
         }
+        debug!(
+            "\tpub {}: {}",
+            prop.attribute("Name").unwrap(),
+            prop.attribute("Type").unwrap()
+        );
     }
-    println!("}}");
+    debug!("}}");
     Ok(())
 }
 
@@ -61,19 +82,19 @@ fn generate_id_impl(entity: Node) ->
     let mut keys = Vec::new();
     for key in entity.descendants().filter(|n| n.has_tag_name("PropertyRef")) {
         keys.push(key.attribute("Name").unwrap());
-        debug!("KEY {:#?}", key.attribute("Name"));
     }
+    debug!("KEYS {:#?}", keys);
     Ok(())
 }
 
-async fn generate(name: &str) ->
+async fn generate(name: &'static str) ->
         Result<(), Box<dyn std::error::Error + 'static>> {
     let xml: String = fs::read_to_string("odata_metadata.xml")?.parse()?;
     let doc = roxmltree::Document::parse(&xml).unwrap();
-    let entity = doc.descendants()
-        .find(|n| n.has_tag_name("EntityType") && n.attribute("Name") == Some(name));
+    let entity = doc.descendants().find(by_name(name));
+    debug!("ENTITY: {:#?}", entity);
     generate_create_struct(entity.unwrap().clone()).ok();
-    // generate_update_struct(entity.clone()).ok();
+    generate_update_struct(entity.unwrap().clone()).ok();
     generate_id_impl(entity.unwrap().clone()).ok();
     Ok(())
 }
