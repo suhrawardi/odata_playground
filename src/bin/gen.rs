@@ -1,20 +1,23 @@
+extern crate reqwest;
+extern crate pretty_env_logger;
+#[macro_use] extern crate log;
+
+use dotenv::dotenv;
+use reqwest::Client;
 use roxmltree::Node;
-use std::collections::HashMap;
-use std::cell::Cell;
-use std::fs::File;
 use std::fs;
+// use std::fs::File;
+// use std::io;
+use std::env;
+// use tokio::runtime::Runtime;
+use std::path::Path;
+
+
 
 fn editable(elem: Option<Node>) -> bool {
     match elem {
-        Some(el) => {
-            match el.attribute("Bool") {
-                Some("false") => { false },
-                _ => { true }
-            }
-        },
-        None => {
-            true
-        }
+        Some(el) => { el.attribute("Bool") != Some("false") },
+        None => { true }
     }
 }
 
@@ -52,7 +55,42 @@ fn two() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    two().ok();
+fn get_env(key: &str) -> String {
+    return env::var(key)
+        .unwrap_or_else(|_| "unknown".into())
+        .parse()
+        .expect("Can't parse .env variable");
+}
+
+fn get_odata_url() -> String {
+    let host = get_env("ODATA_HOST");
+    let mut protocol = "https://".to_string();
+    protocol.push_str(&host);
+    protocol.push_str("/nl_acceptatie/ODataV4/$metadata/");
+    return protocol;
+}
+
+async fn download_metadata() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let user = get_env("NAV_USER");
+    let password = get_env("NAV_PASSWORD");
+    let url = get_odata_url();
+    debug!("Fetching metadata from {}", url);
+    let resp = Client::new()
+        .get(&url)
+        .basic_auth(user, Some(password))
+        .send().await?.text().await?;
+    fs::write("odata_metadata.xml", resp).expect("Unable to write file");
+    Ok(())
+}
+
+#[tokio::main]
+pub async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    dotenv().ok();
+    pretty_env_logger::init();
+    if !Path::new("odata_metadata.xml").exists() {
+        download_metadata().await?;
+        debug!("Downloaded the metadata");
+    }
+    // two().ok();
     Ok(())
 }
